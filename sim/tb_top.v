@@ -105,7 +105,7 @@ module tb_top;
         press(0);
         chk(dut.mode == 2'b10 && dut.targ == 2'd0, "sw[0] -> ALARM_SET, targ reset to SEC");
         press(4);
-        chk(dut.alarm_hour == 0 && dut.alarm_min == 0 && dut.alarm_sec == 59, "alarm sec dec -> 00:00:59 (separate from clock)");
+        chk(dut.alarm_hour == 7 && dut.alarm_min == 0 && dut.alarm_sec == 59, "alarm sec dec -> 07:00:59 (alarm default 07:00:00, separate from clock)");
         chk(dut.clock_hour == 23 && dut.clock_min == 0, "clock runs again after set (22:59:59 -> 23:00)");
 
         // 5) 타이머 모드 -> 일반 모드, 시계 다시 흐름 + 깜빡임 없음

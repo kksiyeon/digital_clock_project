@@ -2,17 +2,26 @@
 //  * Filename      : top.v
 //  * Description   : 시계 + 설정(증가/감소) + blink 연결 예시 top
 //
-//  이 top 하나만으로도 보드에서 "시:분:초 시계 + 설정 + 감소 + 깜빡임"이 동작합니다.
-//  알람/타이머는 같은 hms_cnt 를 재사용한 '자리만 잡아둔' 버전이고,
-//  실제 알람 비교/부저/타이머 종료는 알람·타이머 모듈, 리모콘/LCD/PSD 는 해당 모듈을 붙이면 됩니다.
+//  이 top 하나로 보드에서 "시:분:초 시계 + 설정 + 감소 + 깜빡임 + 알람 + 타이머"가 동작합니다.
+//  리모콘/LCD/PSD 는 해당 모듈을 붙이면 됩니다.
+//
+//  [알람·타이머 추가]
+//   - u_alarm : hms_cnt 자리표시 -> alarm.v (기본 07:00:00, 설정 중 증가/감소)
+//   - u_timer : hms_cnt 자리표시 -> timer.v (기본 00:03:00, 시작/일시정지/리셋, 카운트다운)
+//   - u_ring  : ring_ctrl.v (알람 시각 비교 + 타이머 종료 -> 부저 On/Off)
+//   - u_buzzer: buzzer.v (알람 = 멜로디, 타이머 = 비프) -> o_buzzer
+//   - 깜빡임  : 타이머가 '설정 상태'일 때만 깜빡임 (카운트다운 중엔 안 깜빡임)
+//   - 가장 오른쪽 점(dp0) = 알람 On 표시
 //
 //  핀: 수업과 동일 (i_clk PIN_R8, i_rstn PIN_J15, i_sw[7:0], o_seg, o_seg_enb)
-//      감소 버튼은 i_sw[4] (PIN_C11) 사용
+//      감소 버튼은 i_sw[4] (PIN_C11), 타이머 시작 i_sw[5] (PIN_E10), 정지 i_sw[6] (PIN_E11)
+//      부저 o_buzzer = PIN_C8 (수업 9주차 부저 핀)
 // ==================================================
 module  top
 (
     output      [5:0]   o_seg_enb,
     output      [7:0]   o_seg,
+    output              o_buzzer,
     input       [7:0]   i_sw,
     input               i_clk,
     input               i_rstn
@@ -27,7 +36,10 @@ module  top
     wire    [5:0]   clock_hour, clock_min, clock_sec;
     wire    [5:0]   alarm_hour, alarm_min, alarm_sec;
     wire    [5:0]   timer_hour, timer_min, timer_sec;
-    wire            timer_zero;
+    wire    [1:0]   timer_state;
+    wire            timer_done, timer_idle;
+    wire            start, stop;
+    wire            alarm_ring, timer_ring, buzzer_enb, song;
     wire    [3:0]   num[0:5];
     wire    [3:0]   disp_num[0:5];
 
@@ -40,7 +52,9 @@ module  top
         .o_dec          (dec            ),
         .o_key_any      (key_any        ),
         .o_tick_1hz     (tick_1hz       ),
-        .i_ext_key      (5'd0           ),  // 리모콘 연결 시 여기에
+        .o_start        (start          ),
+        .o_stop         (stop           ),
+        .i_ext_key      (7'd0           ),  // 리모콘 연결 시 여기에
         .i_sw           (i_sw           ),
         .i_clk          (i_clk          ),
         .i_rstn         (i_rstn         )
@@ -66,42 +80,70 @@ module  top
         .i_rstn         (i_rstn         )
     );
 
-    // 알람 시각 (예시: 값만 저장. 비교/부저는 알람 모듈)
-    hms_cnt
-    #(
-        .HOUR_MAX       (23             )
-    )
+    // 알람 시각 (ALARM_SET 모드에서 설정)
+    alarm
     u_alarm(
         .o_hour         (alarm_hour     ),
         .o_min          (alarm_min      ),
         .o_sec          (alarm_sec      ),
-        .o_zero         (               ),
         .i_set          (mode == MODE_ALARM_SET),
         .i_targ         (targ           ),
         .i_inc          (inc            ),
         .i_dec          (dec            ),
-        .i_up_tick      (1'b0           ),
-        .i_dn_tick      (1'b0           ),
         .i_clk          (i_clk          ),
         .i_rstn         (i_rstn         )
     );
 
-    // 타이머 (예시: TIMER 모드에서 설정만. 시작/정지/부저는 타이머 모듈)
-    hms_cnt
-    #(
-        .HOUR_MAX       (23             )
-    )
+    // 타이머 (TIMER 모드에서 설정 / 시작 / 일시정지 / 리셋, 모드를 바꿔도 계속 동작)
+    //  정지 버튼: 울리는 중이면 울림만 끄고, 아니면 TIMER 모드에서 타이머 리셋
+    timer
     u_timer(
         .o_hour         (timer_hour     ),
         .o_min          (timer_min      ),
         .o_sec          (timer_sec      ),
-        .o_zero         (timer_zero     ),
+        .o_state        (timer_state    ),
+        .o_done         (timer_done     ),
         .i_set          (mode == MODE_TIMER),
         .i_targ         (targ           ),
         .i_inc          (inc            ),
         .i_dec          (dec            ),
-        .i_up_tick      (1'b0           ),
-        .i_dn_tick      (1'b0           ),  // 타이머 동작 시: tick_1hz & running & ~timer_zero
+        .i_start        (start & (mode == MODE_TIMER)),
+        .i_reset        (stop  & (mode == MODE_TIMER) & buzzer_enb),
+        .i_tick         (tick_1hz       ),
+        .i_ring         (timer_ring     ),
+        .i_clk          (i_clk          ),
+        .i_rstn         (i_rstn         )
+    );
+    assign  timer_idle = (timer_state == 2'd0);
+
+    // 울림 제어 (알람 시각 비교 + 타이머 종료)
+    ring_ctrl
+    u_ring(
+        .o_buzzer_enb   (buzzer_enb     ),
+        .o_song         (song           ),
+        .o_alarm_ring   (alarm_ring     ),
+        .o_timer_ring   (timer_ring     ),
+        .i_alarm_en     (alarm_en       ),
+        .i_clock_setting(mode == MODE_CLOCK_SET),
+        .i_clock_hour   (clock_hour     ),
+        .i_clock_min    (clock_min      ),
+        .i_clock_sec    (clock_sec      ),
+        .i_alarm_hour   (alarm_hour     ),
+        .i_alarm_min    (alarm_min      ),
+        .i_alarm_sec    (alarm_sec      ),
+        .i_timer_done   (timer_done     ),
+        .i_stop         (stop           ),
+        .i_tick_1s      (tick_1hz       ),
+        .i_clk          (i_clk          ),
+        .i_rstn         (i_rstn         )
+    );
+
+    // 부저 (알람 = 환희의 송가, 타이머 = 비프)
+    buzzer
+    u_buzzer(
+        .o_out          (o_buzzer       ),
+        .i_enb          (buzzer_enb     ),
+        .i_song         (song           ),
         .i_clk          (i_clk          ),
         .i_rstn         (i_rstn         )
     );
@@ -140,7 +182,8 @@ module  top
         .i_num3         (num[3]         ),
         .i_num4         (num[4]         ),
         .i_num5         (num[5]         ),
-        .i_en           (mode != MODE_CLOCK_OPR),  // [추측] 타이머 '동작 중'엔 0 이 되게 타이머 모듈과 조정
+        .i_en           ((mode == MODE_CLOCK_SET) | (mode == MODE_ALARM_SET) |
+                         ((mode == MODE_TIMER) & timer_idle)),  // 타이머는 설정 상태일 때만
         .i_targ         (targ           ),
         .i_hold         (key_any        ),
         .i_clk          (i_clk          ),
@@ -160,7 +203,7 @@ module  top
         .i_num3         (disp_num[3]    ),
         .i_num4         (disp_num[4]    ),
         .i_num5         (disp_num[5]    ),
-        .i_dp0          (1'b0           ),
+        .i_dp0          (alarm_en       ),  // 알람 On 표시
         .i_dp1          (1'b0           ),
         .i_dp2          (1'b1           ),  // 분.초 사이 점
         .i_dp3          (1'b0           ),

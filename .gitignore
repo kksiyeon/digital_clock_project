@@ -1,0 +1,19 @@
+# Quartus 가 만드는 파일 (올리지 않음)
+db/
+incremental_db/
+output_files/
+simulation/
+greybox_tmp/
+*.qws
+*.bak
+*.rpt
+*.summary
+*.smsg
+*.done
+*.jdi
+*.sld
+*.pin
+*.qarlog
+# 시뮬레이션 결과
+sim/tb
+*.vcd

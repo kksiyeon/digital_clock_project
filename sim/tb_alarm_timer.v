@@ -16,7 +16,8 @@ module tb_alarm_timer;
     wire [7:0]  seg;
     wire        buzzer;
 
-    top dut(.o_seg_enb(seg_enb), .o_seg(seg), .o_buzzer(buzzer), .i_sw(sw), .i_clk(clk), .i_rstn(rstn));
+    top dut(.o_seg_enb(seg_enb), .o_seg(seg), .o_buzzer(buzzer), .i_sw(sw), .i_clk(clk), .i_rstn(rstn),
+            .i_ir_n(1'b1), .i_psd_near(1'b0));
     defparam dut.u_ctrl.DEB_FREQDIV         = 10;
     defparam dut.u_ctrl.SEC_FREQDIV         = 1000;
     defparam dut.u_blink.FREQDIV            = 200;
@@ -174,7 +175,7 @@ module tb_alarm_timer;
         chk(dut.timer_state == 2'd0 && dut.buzzer_enb, "[9] 00:00:00 -> start ignored");
 
         if (errors == 0) $display("ALL TESTS PASSED");
-        else             $display("%0d TEST(S) FAILED", errors);
+        else             $fatal(1, "%0d TEST(S) FAILED", errors);
         $finish;
     end
 endmodule

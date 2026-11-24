@@ -62,7 +62,9 @@ module  ring_ctrl
             if(o_alarm_ring || o_timer_ring) begin
                 if(i_stop) begin
                     o_alarm_ring    <= 1'b0;
-                    o_timer_ring    <= 1'b0;
+                    // 알람을 끄는 클럭에 새로 끝난 타이머는 별도 울림으로 남긴다.
+                    // 종료 펄스를 잃으면 타이머가 울림의 하강 에지를 기다리며 DONE에 머문다.
+                    o_timer_ring    <= i_timer_done;
                 end else begin
                     if(!i_alarm_en) o_alarm_ring <= 1'b0;
                     if(i_tick_1s) begin

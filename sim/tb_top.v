@@ -14,7 +14,8 @@ module tb_top;
     wire [5:0]  seg_enb;
     wire [7:0]  seg;
 
-    top dut(.o_seg_enb(seg_enb), .o_seg(seg), .i_sw(sw), .i_clk(clk), .i_rstn(rstn));
+    top dut(.o_seg_enb(seg_enb), .o_seg(seg), .i_sw(sw), .i_clk(clk), .i_rstn(rstn),
+            .i_ir_n(1'b1), .i_psd_near(1'b0));
     defparam dut.u_ctrl.DEB_FREQDIV = 10;
     defparam dut.u_ctrl.SEC_FREQDIV = 1000;
     defparam dut.u_blink.FREQDIV    = 200;
@@ -119,7 +120,7 @@ module tb_top;
         chk(dut.disp_num[4] != 4'd15 && dut.disp_num[0] != 4'd15, "normal mode: no blink");
 
         if (errors == 0) $display("ALL TESTS PASSED");
-        else             $display("%0d TEST(S) FAILED", errors);
+        else             $fatal(1, "%0d TEST(S) FAILED", errors);
         $finish;
     end
 endmodule

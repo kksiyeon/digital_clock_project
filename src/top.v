@@ -3,7 +3,7 @@
 //  * Description   : 시계 + 설정(증가/감소) + blink 연결 예시 top
 //
 //  이 top 하나로 보드에서 "시:분:초 시계 + 설정 + 감소 + 깜빡임 + 알람 + 타이머"가 동작합니다.
-//  리모콘/LCD/PSD 는 해당 모듈을 붙이면 됩니다.
+//  리모콘은 ctrl에, LCD는 상태 신호에, PSD는 울림 정지에 연결합니다.
 //
 //  [알람·타이머 추가]
 //   - u_alarm : hms_cnt 자리표시 -> alarm.v (기본 07:00:00, 설정 중 증가/감소)
@@ -18,13 +18,27 @@
 //      부저 o_buzzer = PIN_C8 (수업 9주차 부저 핀)
 // ==================================================
 module  top
+#(
+    parameter integer IO_CLK_HZ = 50000000,  // IR/LCD/PSD용; 기존 시계 분주와 별도
+    parameter integer PSD_STABLE_CYCLES = (IO_CLK_HZ + 49) / 50,
+    parameter PSD_ACTIVE_HIGH = 1'b1,
+    parameter IR_FILTER_ADDRESS = 1'b0,
+    parameter [7:0] IR_ADDRESS = 8'h00,
+    parameter [7:0] IR_MODE = 8'h45, IR_TARG = 8'h46, IR_INC = 8'h18,
+                    IR_ALARM = 8'h47, IR_DEC = 8'h52, IR_START = 8'h40,
+                    IR_STOP = 8'h44
+)
 (
     output      [5:0]   o_seg_enb,
     output      [7:0]   o_seg,
     output              o_buzzer,
     input       [7:0]   i_sw,
     input               i_clk,
-    input               i_rstn
+    input               i_rstn,
+    input               i_ir_n,
+    input               i_psd_near,
+    output              o_lcd_rs, o_lcd_rw, o_lcd_e,
+    output      [7:0]   o_lcd_data
 );
     localparam  MODE_CLOCK_OPR  = 2'b00;
     localparam  MODE_CLOCK_SET  = 2'b01;
@@ -40,8 +54,29 @@ module  top
     wire            timer_done, timer_idle;
     wire            start, stop;
     wire            alarm_ring, timer_ring, buzzer_enb, song;
+    wire    [6:0]   ir_key;
+    wire            psd_mute;
     wire    [3:0]   num[0:5];
     wire    [3:0]   disp_num[0:5];
+
+    clock_ir_keys #(
+        .CLK_HZ(IO_CLK_HZ), .IR_FILTER_ADDRESS(IR_FILTER_ADDRESS), .IR_ADDRESS(IR_ADDRESS),
+        .IR_MODE(IR_MODE), .IR_TARG(IR_TARG), .IR_INC(IR_INC), .IR_ALARM(IR_ALARM),
+        .IR_DEC(IR_DEC), .IR_START(IR_START), .IR_STOP(IR_STOP)
+    ) u_ir_keys (
+        .i_clk(i_clk), .i_rstn(i_rstn), .i_ir_n(i_ir_n), .o_key(ir_key)
+    );
+
+    clock_lcd_status #(.CLK_HZ(IO_CLK_HZ)) u_lcd_status (
+        .i_clk(i_clk), .i_rstn(i_rstn), .i_mode(mode), .i_alarm_en(alarm_en),
+        .i_alarm_hour(alarm_hour), .i_alarm_min(alarm_min), .i_alarm_sec(alarm_sec),
+        .o_lcd_rs(o_lcd_rs), .o_lcd_rw(o_lcd_rw), .o_lcd_e(o_lcd_e), .o_lcd_data(o_lcd_data)
+    );
+
+    clock_psd_mute #(.STABLE_CYCLES(PSD_STABLE_CYCLES), .ACTIVE_HIGH(PSD_ACTIVE_HIGH)) u_psd_mute (
+        .i_clk(i_clk), .i_rstn(i_rstn), .i_psd_near(i_psd_near),
+        .i_ringing(alarm_ring | timer_ring), .o_mute(psd_mute)
+    );
 
     ctrl
     u_ctrl(
@@ -54,7 +89,7 @@ module  top
         .o_tick_1hz     (tick_1hz       ),
         .o_start        (start          ),
         .o_stop         (stop           ),
-        .i_ext_key      (7'd0           ),  // 리모콘 연결 시 여기에
+        .i_ext_key      (ir_key          ),
         .i_sw           (i_sw           ),
         .i_clk          (i_clk          ),
         .i_rstn         (i_rstn         )
@@ -132,7 +167,7 @@ module  top
         .i_alarm_min    (alarm_min      ),
         .i_alarm_sec    (alarm_sec      ),
         .i_timer_done   (timer_done     ),
-        .i_stop         (stop           ),
+        .i_stop         (stop | psd_mute),  // PSD는 울림만 정지, 타이머 리셋과 분리
         .i_tick_1s      (tick_1hz       ),
         .i_clk          (i_clk          ),
         .i_rstn         (i_rstn         )

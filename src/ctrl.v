@@ -9,11 +9,13 @@
 //   3) 설정 대상: 초 -> 분 -> 시 (2비트), 모드 바뀌면 '초'부터 다시 시작
 //   4) 1Hz '클럭' 대신 1초마다 1클럭짜리 펄스(o_tick_1hz)
 //   5) 리모콘용 입력 i_ext_key: 스위치와 같은 의미의 1클럭 펄스를 넣으면 OR 됨
+//   6) [알람·타이머] sw[5] 타이머 시작/일시정지, sw[6] 정지 버튼 추가
 //
-//  스위치 배치 (수업과 동일 + sw[4])
+//  스위치 배치 (수업과 동일 + sw[4] + sw[5], sw[6])
 //   sw[0] 모드 / sw[1] 설정 대상 / sw[2] 증가 / sw[3] 알람 On/Off / sw[4] 감소
+//   sw[5] 타이머 시작/일시정지 / sw[6] 정지 (울림 끄기, 울리지 않을 땐 타이머 리셋)
 //
-//  모드 [추측: 타이머 모드 위치는 알람·타이머 담당과 상의]
+//  모드
 //   2'b00 CLOCK_OPR -> 2'b01 CLOCK_SET -> 2'b10 ALARM_SET -> 2'b11 TIMER -> 00 ...
 // ==================================================
 module  ctrl
@@ -29,7 +31,9 @@ module  ctrl
     output              o_dec,          // 감소 1클럭 펄스
     output              o_key_any,      // 설정 관련 버튼(대상/증가/감소) 아무거나 -> blink.i_hold
     output              o_tick_1hz,     // 1초마다 1클럭 펄스
-    input       [4:0]   i_ext_key,      // 리모콘 펄스 {감소, 알람, 증가, 대상, 모드}, 안 쓰면 5'd0
+    output              o_start,        // 타이머 시작/일시정지 1클럭 펄스
+    output              o_stop,         // 정지 1클럭 펄스 (울림 끄기 / 타이머 리셋)
+    input       [6:0]   i_ext_key,      // 리모콘 펄스 {정지, 시작, 감소, 알람, 증가, 대상, 모드}, 안 쓰면 7'd0
     input       [7:0]   i_sw,
     input               i_clk,
     input               i_rstn
@@ -72,10 +76,14 @@ module  ctrl
     wire    key_inc     = p_sw[2] | i_ext_key[2];
     wire    key_alarm   = p_sw[3] | i_ext_key[3];
     wire    key_dec     = p_sw[4] | i_ext_key[4];
+    wire    key_start   = p_sw[5] | i_ext_key[5];
+    wire    key_stop    = p_sw[6] | i_ext_key[6];
 
     assign  o_inc       = key_inc;
     assign  o_dec       = key_dec;
     assign  o_key_any   = key_targ | key_inc | key_dec;
+    assign  o_start     = key_start;
+    assign  o_stop      = key_stop;
 
     // ---- 모드 FSM ----
     always @(posedge i_clk or negedge i_rstn) begin

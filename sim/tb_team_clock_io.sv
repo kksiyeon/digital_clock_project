@@ -8,10 +8,12 @@ module tb_team_clock_io;
     top #(.IO_CLK_HZ(100000), .PSD_STABLE_CYCLES(8),
           .IR_FILTER_ADDRESS(1), .IR_ADDRESS(8'h12)) dut (
         .i_clk(clk), .i_rstn(rstn), .i_sw(8'hFF),
-        .i_ir_n(ir_n), .i_psd_near(psd_near),
+        .i_ir_n(ir_n), .i_adc_dout(1'b0),
         .o_lcd_rs(lcd_rs), .o_lcd_rw(lcd_rw), .o_lcd_e(lcd_e), .o_lcd_data(lcd_data)
     );
     defparam dut.u_ctrl.DEB_FREQDIV = 10;
+    // ADC 경로는 tb_psd_adc 에서 따로 확인. 여기서는 '가까움' 레벨을 직접 넣음
+    initial force dut.psd_near = psd_near;
 
     task send_frame(input [7:0] addr, inverse_addr, cmd, inverse_cmd);
         reg [31:0] payload;

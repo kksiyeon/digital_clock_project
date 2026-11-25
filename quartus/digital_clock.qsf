@@ -1,0 +1,100 @@
+# ==================================================================
+#  디지털 시계 - DE0-Nano (Cyclone IV E EP4CE22F17C6) 프로젝트/핀 설정
+#  Quartus 에서 quartus/digital_clock.qpf 를 열면 됨 (소스는 ../src)
+#  핀 번호: 강의자료(08~11주차) Pin Assignment 표 + DE0-Nano 매뉴얼
+# ==================================================================
+set_global_assignment -name FAMILY "Cyclone IV E"
+set_global_assignment -name DEVICE EP4CE22F17C6
+set_global_assignment -name TOP_LEVEL_ENTITY top
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name SDC_FILE digital_clock.sdc
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVTTL"
+
+# ---- 소스 ----
+set_global_assignment -name VERILOG_FILE ../src/class/buzzer_nco.v
+set_global_assignment -name VERILOG_FILE ../src/class/ctrl_debouncer.v
+set_global_assignment -name VERILOG_FILE ../src/class/ssegdisp.v
+set_global_assignment -name VERILOG_FILE ../src/alarm.v
+set_global_assignment -name VERILOG_FILE ../src/alarm_cnt.v
+set_global_assignment -name VERILOG_FILE ../src/arbiter.v
+set_global_assignment -name VERILOG_FILE ../src/blink.v
+set_global_assignment -name VERILOG_FILE ../src/buzzer.v
+set_global_assignment -name VERILOG_FILE ../src/buzzer_sheet.v
+set_global_assignment -name VERILOG_FILE ../src/clock_ir_keys.v
+set_global_assignment -name VERILOG_FILE ../src/clock_lcd_status.v
+set_global_assignment -name VERILOG_FILE ../src/clock_psd_mute.v
+set_global_assignment -name VERILOG_FILE ../src/ctrl.v
+set_global_assignment -name VERILOG_FILE ../src/hms_cnt.v
+set_global_assignment -name VERILOG_FILE ../src/ir_nec.v
+set_global_assignment -name VERILOG_FILE ../src/psd_adc.v
+set_global_assignment -name VERILOG_FILE ../src/ring_ctrl.v
+set_global_assignment -name VERILOG_FILE ../src/sw_pulse.v
+set_global_assignment -name VERILOG_FILE ../src/text_lcd.v
+set_global_assignment -name VERILOG_FILE ../src/timer.v
+set_global_assignment -name VERILOG_FILE ../src/timer_cnt.v
+set_global_assignment -name VERILOG_FILE ../src/top.v
+set_global_assignment -name VERILOG_FILE ../src/updn_cnt.v
+
+# ---- 클럭 / 리셋 (KEY0) ----
+set_location_assignment PIN_R8  -to i_clk
+set_location_assignment PIN_J15 -to i_rstn
+
+# ---- 키스위치 ----
+#  i_sw[0] (PIN_C9) 자리는 IR 수신기(i_ir_n)가 씀 -> top 의 SW0_SHARED_WITH_IR=1 이라
+#  모드 버튼은 sw[7] (PIN_D11). i_sw[0] 은 회로에서 쓰지 않으므로 핀을 지정하지 않음
+#  (Quartus 가 "핀 미지정" 경고를 내도 무시해도 됨)
+#   sw[7] 모드 / sw[1] 설정 대상 / sw[2] 증가 / sw[3] 알람 On/Off / sw[4] 감소
+#   sw[5] 타이머 시작/일시정지 / sw[6] 정지
+set_location_assignment PIN_D11 -to i_sw[7]
+set_location_assignment PIN_A12 -to i_sw[6]
+set_location_assignment PIN_B11 -to i_sw[5]
+set_location_assignment PIN_C11 -to i_sw[4]
+set_location_assignment PIN_E10 -to i_sw[3]
+set_location_assignment PIN_E11 -to i_sw[2]
+set_location_assignment PIN_D9  -to i_sw[1]
+
+# ---- IR 리모콘 수신 (수업 10주차 i_ir_rxb 와 같은 핀) ----
+set_location_assignment PIN_C9  -to i_ir_n
+
+# ---- 부저 ----
+set_location_assignment PIN_C8  -to o_buzzer
+
+# ---- 7-세그먼트 (GPIO-1 헤더, 수업 8주차) ----
+set_location_assignment PIN_F13 -to o_seg[7]
+set_location_assignment PIN_T15 -to o_seg[6]
+set_location_assignment PIN_T14 -to o_seg[5]
+set_location_assignment PIN_T13 -to o_seg[4]
+set_location_assignment PIN_R13 -to o_seg[3]
+set_location_assignment PIN_T12 -to o_seg[2]
+set_location_assignment PIN_R12 -to o_seg[1]
+set_location_assignment PIN_T11 -to o_seg[0]
+set_location_assignment PIN_T10 -to o_seg_enb[5]
+set_location_assignment PIN_R11 -to o_seg_enb[4]
+set_location_assignment PIN_P11 -to o_seg_enb[3]
+set_location_assignment PIN_R10 -to o_seg_enb[2]
+set_location_assignment PIN_N12 -to o_seg_enb[1]
+set_location_assignment PIN_P9  -to o_seg_enb[0]
+
+# ---- 거리센서 : DE0-Nano 내장 ADC128S102 (수업 10주차) ----
+set_location_assignment PIN_A10 -to o_adc_csn
+set_location_assignment PIN_B10 -to o_adc_din
+set_location_assignment PIN_B14 -to o_adc_sclk
+set_location_assignment PIN_A9  -to i_adc_dout
+
+# ---- Text LCD (GPIO-0 헤더 GPIO_0[0..10]) ----
+#  수업 11주차 LCD 핀(T11,R12,...,P11 = GPIO_1[0..10])은 7-세그먼트 핀과 같아서 동시에 쓸 수 없음.
+#  그래서 LCD 케이블을 GPIO-0 헤더의 같은 위치(GPIO_0[0..10])에 꽂는 것으로 정함.
+#  위치 대응: data0 GPIO_0[0]=D3 ... data7 GPIO_0[7]=B5, rs [8]=A5, rw [9]=D5, e [10]=B6
+#  배선을 다르게 하면 아래 11줄만 고치면 됨.
+set_location_assignment PIN_D3  -to o_lcd_data[0]
+set_location_assignment PIN_C3  -to o_lcd_data[1]
+set_location_assignment PIN_A2  -to o_lcd_data[2]
+set_location_assignment PIN_A3  -to o_lcd_data[3]
+set_location_assignment PIN_B3  -to o_lcd_data[4]
+set_location_assignment PIN_B4  -to o_lcd_data[5]
+set_location_assignment PIN_A4  -to o_lcd_data[6]
+set_location_assignment PIN_B5  -to o_lcd_data[7]
+set_location_assignment PIN_A5  -to o_lcd_rs
+set_location_assignment PIN_D5  -to o_lcd_rw
+set_location_assignment PIN_B6  -to o_lcd_e

@@ -5,6 +5,14 @@
 //  이 top 하나로 보드에서 "시:분:초 시계 + 설정 + 감소 + 깜빡임 + 알람 + 타이머"가 동작합니다.
 //  리모콘은 ctrl에, LCD는 상태 신호에, PSD는 울림 정지에 연결합니다.
 //
+//  [보드 연결 정리]
+//   - 거리센서: psd_adc.v 가 보드 내장 ADC128S102 를 SPI 로 읽어 '가까움' 레벨을 만들고,
+//              clock_psd_mute 가 20ms 안정화 후 울림만 끔
+//   - 리모콘 : 수업 10주차처럼 IR 수신기를 PIN_C9 에 연결. 이 핀은 원래 sw[0](모드) 자리라서
+//              SW0_SHARED_WITH_IR=1 (기본) 이면 모드 버튼을 sw[7] (PIN_D11) 로 옮김
+//              (시뮬레이션처럼 sw[0] 을 모드로 쓰려면 SW0_SHARED_WITH_IR=0)
+//   - LCD    : 7-세그먼트와 핀이 겹치지 않게 GPIO-0 헤더 GPIO_0[0..10] 에 연결 (quartus/digital_clock.qsf)
+//
 //  [알람·타이머 추가]
 //   - u_alarm : hms_cnt 자리표시 -> alarm.v (기본 07:00:00, 설정 중 증가/감소)
 //   - u_timer : hms_cnt 자리표시 -> timer.v (기본 00:03:00, 시작/일시정지/리셋, 카운트다운)
@@ -22,6 +30,11 @@ module  top
     parameter integer IO_CLK_HZ = 50000000,  // IR/LCD/PSD용; 기존 시계 분주와 별도
     parameter integer PSD_STABLE_CYCLES = (IO_CLK_HZ + 49) / 50,
     parameter PSD_ACTIVE_HIGH = 1'b1,
+    parameter [2:0]  PSD_ADC_CH = 3'd0,      // 거리센서가 연결된 ADC128S102 채널
+    parameter [11:0] PSD_TH_ON  = 12'd2000,  // 이 값 이상이면 가까움 (보드에서 조정)
+    parameter [11:0] PSD_TH_OFF = 12'd1600,  // 이 값 이하이면 멀어짐
+    parameter integer PSD_SCLK_HALF = 3,     // ADC SCLK = i_clk / (2*3) = 약 8.3MHz
+    parameter SW0_SHARED_WITH_IR = 1'b1,     // 1: IR 이 sw[0] 핀(C9)을 쓰므로 모드 버튼 = sw[7]
     parameter IR_FILTER_ADDRESS = 1'b0,
     parameter [7:0] IR_ADDRESS = 8'h00,
     parameter [7:0] IR_MODE = 8'h45, IR_TARG = 8'h46, IR_INC = 8'h18,
@@ -36,7 +49,8 @@ module  top
     input               i_clk,
     input               i_rstn,
     input               i_ir_n,
-    input               i_psd_near,
+    output              o_adc_csn, o_adc_sclk, o_adc_din,   // ADC128S102 (거리센서)
+    input               i_adc_dout,
     output              o_lcd_rs, o_lcd_rw, o_lcd_e,
     output      [7:0]   o_lcd_data
 );
@@ -55,7 +69,9 @@ module  top
     wire            start, stop;
     wire            alarm_ring, timer_ring, buzzer_enb, song;
     wire    [6:0]   ir_key;
-    wire            psd_mute;
+    wire            psd_mute, psd_near;
+    wire    [11:0]  psd_data;
+    wire    [7:0]   sw_key = SW0_SHARED_WITH_IR ? {1'b1, i_sw[6:1], i_sw[7]} : i_sw;
     wire    [3:0]   num[0:5];
     wire    [3:0]   disp_num[0:5];
 
@@ -73,8 +89,15 @@ module  top
         .o_lcd_rs(o_lcd_rs), .o_lcd_rw(o_lcd_rw), .o_lcd_e(o_lcd_e), .o_lcd_data(o_lcd_data)
     );
 
+    psd_adc #(.SCLK_HALF(PSD_SCLK_HALF), .CHANNEL(PSD_ADC_CH),
+              .TH_ON(PSD_TH_ON), .TH_OFF(PSD_TH_OFF)) u_psd_adc (
+        .o_csn(o_adc_csn), .o_sclk(o_adc_sclk), .o_din(o_adc_din),
+        .o_data(psd_data), .o_valid(), .o_near(psd_near),
+        .i_dout(i_adc_dout), .i_clk(i_clk), .i_rstn(i_rstn)
+    );
+
     clock_psd_mute #(.STABLE_CYCLES(PSD_STABLE_CYCLES), .ACTIVE_HIGH(PSD_ACTIVE_HIGH)) u_psd_mute (
-        .i_clk(i_clk), .i_rstn(i_rstn), .i_psd_near(i_psd_near),
+        .i_clk(i_clk), .i_rstn(i_rstn), .i_psd_near(psd_near),
         .i_ringing(alarm_ring | timer_ring), .o_mute(psd_mute)
     );
 
@@ -90,7 +113,7 @@ module  top
         .o_start        (start          ),
         .o_stop         (stop           ),
         .i_ext_key      (ir_key          ),
-        .i_sw           (i_sw           ),
+        .i_sw           (sw_key         ),
         .i_clk          (i_clk          ),
         .i_rstn         (i_rstn         )
     );

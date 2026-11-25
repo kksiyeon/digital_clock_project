@@ -1,0 +1,130 @@
+// ==================================================
+//  * Filename      : tb_board_io.v
+//  * Description   : 보드 연결 부분 확인
+//    1) psd_adc 가 ADC128S102 프레임(SCLK 16번, 채널 주소, 12비트 값)을 맞게 주고받는지
+//    2) 임계값 + 히스테리시스로 '가까움' 판단
+//    3) top 전체: 알람이 울릴 때 ADC 값이 커지면(손을 가까이) 울림이 꺼지고 알람 ON 은 유지
+//    4) 보드 기본 설정(SW0_SHARED_WITH_IR=1): 모드 버튼 = sw[7], sw[0] 은 무시
+//  실행 (저장소 루트):
+//    iverilog -g2012 -s tb_board_io -o /tmp/tb_board_io src/*.v src/class/*.v sim/tb_board_io.v
+//    vvp /tmp/tb_board_io
+// ==================================================
+`timescale 1ns/1ps
+module tb_board_io;
+    reg         clk = 1'b0, rstn = 1'b0;
+    reg  [7:0]  sw = 8'hFF;
+    wire [5:0]  seg_enb;
+    wire [7:0]  seg;
+    wire        buzzer, adc_csn, adc_sclk, adc_din;
+    wire        lcd_rs, lcd_rw, lcd_e;
+    wire [7:0]  lcd_data;
+    reg         adc_dout = 1'b0;
+
+    top #(.PSD_ADC_CH(3'd5), .PSD_STABLE_CYCLES(100)) dut(
+        .o_seg_enb(seg_enb), .o_seg(seg), .o_buzzer(buzzer),
+        .i_sw(sw), .i_clk(clk), .i_rstn(rstn),
+        .i_ir_n(1'b1),
+        .o_adc_csn(adc_csn), .o_adc_sclk(adc_sclk), .o_adc_din(adc_din), .i_adc_dout(adc_dout),
+        .o_lcd_rs(lcd_rs), .o_lcd_rw(lcd_rw), .o_lcd_e(lcd_e), .o_lcd_data(lcd_data)
+    );
+    defparam dut.u_ctrl.DEB_FREQDIV = 10;
+    defparam dut.u_ctrl.SEC_FREQDIV = 1000;
+
+    always #10 clk = ~clk;      // 50MHz
+
+    // ---- ADC128S102 동작 모델 ----
+    //  CS 하강 후 SCLK 하강 n번째(1~16)에 비트 n 출력: 1~4 = 0, 5~16 = DB11..DB0
+    //  SCLK 상승 3~5번째에 DIN 을 읽어 다음 변환 채널로 사용
+    reg  [11:0] adc_val [0:7];
+    reg  [2:0]  adc_ch_next = 3'd0, adc_ch_cur = 3'd0, adc_addr_rx = 3'd0;
+    integer     nfall = 0, nrise = 0, frames = 0, bad_frames = 0;
+    always @(negedge adc_csn) begin
+        nfall = 0; nrise = 0; adc_ch_cur = adc_ch_next;
+    end
+    always @(posedge adc_csn) begin
+        frames = frames + 1;
+        if (nrise != 16 || nfall != 16) bad_frames = bad_frames + 1;
+        adc_ch_next = adc_addr_rx;
+    end
+    always @(negedge adc_sclk) if (!adc_csn) begin
+        nfall = nfall + 1;
+        adc_dout <= #5 (nfall <= 4) ? 1'b0 : adc_val[adc_ch_cur][16 - nfall];
+    end
+    always @(posedge adc_sclk) if (!adc_csn) begin
+        nrise = nrise + 1;
+        if (nrise >= 3 && nrise <= 5) adc_addr_rx[5 - nrise] = adc_din;
+    end
+
+    integer errors = 0, i;
+    task chk(input cond, input [8*100-1:0] msg);
+        begin
+            if (cond) $display("ok   %0s", msg);
+            else begin $display("FAIL %0s", msg); errors = errors + 1; end
+        end
+    endtask
+    task wait_frames(input integer n);
+        integer f0;
+        begin f0 = frames; wait (frames >= f0 + n); repeat (20) @(posedge clk); end
+    endtask
+    task press(input integer k);
+        begin
+            sw[k] = 1'b0; repeat (50) @(posedge clk);
+            sw[k] = 1'b1; repeat (100) @(posedge clk);
+        end
+    endtask
+
+    initial begin
+        for (i = 0; i < 8; i = i + 1) adc_val[i] = 12'h111 * i;
+        adc_val[5] = 12'd300;                   // 멀리 있음
+        repeat (5) @(posedge clk); rstn = 1;
+        repeat (100) @(posedge clk); rstn = 0;
+        repeat (5) @(posedge clk); rstn = 1;
+        bad_frames = 0;                         // 첫 리셋 때 중간에 끊긴 프레임은 제외
+
+        // 1) SPI 프레임과 채널 주소
+        wait_frames(3);
+        chk(bad_frames == 0, "ADC frame = SCLK 16 clocks");
+        chk(adc_addr_rx == 3'd5, "channel address 5 sent on DIN");
+        chk(dut.psd_data == 12'd300, "12-bit value read from channel 5");
+        adc_val[5] = 12'hA5C; wait_frames(2);
+        chk(dut.psd_data == 12'hA5C, "all 12 bits incl. LSB (0xA5C)");
+
+        // 2) 히스테리시스 (TH_ON 2000 / TH_OFF 1600)
+        adc_val[5] = 12'd1500; wait_frames(2);
+        chk(dut.psd_near == 1'b0, "1500 -> far");
+        adc_val[5] = 12'd1999; wait_frames(2);
+        chk(dut.psd_near == 1'b0, "1999 -> still far (below TH_ON)");
+        adc_val[5] = 12'd2100; wait_frames(2);
+        chk(dut.psd_near == 1'b1, "2100 -> near");
+        adc_val[5] = 12'd1700; wait_frames(2);
+        chk(dut.psd_near == 1'b1, "1700 -> still near (above TH_OFF)");
+        adc_val[5] = 12'd1500; wait_frames(2);
+        chk(dut.psd_near == 1'b0, "1500 -> far again");
+
+        // 3) 알람 울림 중 손을 가까이 -> 울림만 꺼짐
+        press(3);                                   // 알람 ON
+        chk(dut.alarm_en == 1'b1, "sw[3] alarm ON");
+        force dut.clock_hour = 6'd7; force dut.clock_min = 6'd0; force dut.clock_sec = 6'd0;
+        repeat (10) @(posedge clk);
+        chk(dut.alarm_ring == 1'b1, "alarm rings at 07:00:00");
+        adc_val[5] = 12'd2500; wait_frames(3); repeat (300) @(posedge clk);
+        chk(dut.alarm_ring == 1'b0, "hand near (ADC 2500) -> alarm ring stops");
+        chk(dut.alarm_en == 1'b1, "alarm stays ON after PSD mute");
+        release dut.clock_hour; release dut.clock_min; release dut.clock_sec;
+        adc_val[5] = 12'd300; wait_frames(3);
+
+        // 4) 보드 설정: 모드 = sw[7], sw[0] 은 IR 핀이라 무시
+        chk(dut.mode == 2'd0, "mode CLOCK_OPR");
+        press(0);
+        chk(dut.mode == 2'd0, "sw[0] ignored (shared with IR pin)");
+        press(7);
+        chk(dut.mode == 2'd1, "sw[7] -> CLOCK_SET");
+        press(1);
+        chk(dut.targ == 2'd1, "sw[1] still selects field");
+
+        if (errors == 0) $display("ALL TESTS PASSED");
+        else             $fatal(1, "%0d TEST(S) FAILED", errors);
+        $finish;
+    end
+    initial #50000000 $fatal(1, "timeout");
+endmodule

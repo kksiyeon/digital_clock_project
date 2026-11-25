@@ -38,9 +38,15 @@ module  top
     parameter SW0_SHARED_WITH_IR = 1'b0,     // 1: IR 을 sw[0] 핀(C9)에 꽂을 때. 모드 버튼 = sw[7]
     parameter IR_FILTER_ADDRESS = 1'b0,
     parameter [7:0] IR_ADDRESS = 8'h00,
-    parameter [7:0] IR_MODE = 8'h45, IR_TARG = 8'h46, IR_INC = 8'h18,
-                    IR_ALARM = 8'h47, IR_DEC = 8'h52, IR_START = 8'h40,
-                    IR_STOP = 8'h44
+    // 수업 리모콘(LY, 21키 배열) NEC 명령 코드 [추정: 같은 칩을 쓰는 21키 리모콘의 버튼 위치별 코드]
+    //  sw[7] 을 누르면 7-세그먼트에 받은 코드가 10진수로 나오므로 실제 값으로 확인/수정
+    //   MENU(71=0x47) 모드 / ◀(7=0x07) ▶(9=0x09) 설정 대상 / +(68=0x44) ▲(64=0x40) 증가
+    //   -(22=0x16) ▼(25=0x19) 감소 / 전원(69=0x45) 알람 On/Off / OK(21=0x15) 타이머 시작
+    //   ↩(67=0x43) 정지
+    parameter [7:0] IR_MODE = 8'h47, IR_TARG = 8'h09, IR_INC = 8'h40,
+                    IR_ALARM = 8'h45, IR_DEC = 8'h19, IR_START = 8'h15,
+                    IR_STOP = 8'h43,
+    parameter [7:0] IR_TARG2 = 8'h07, IR_INC2 = 8'h44, IR_DEC2 = 8'h16
 )
 (
     output      [5:0]   o_seg_enb,
@@ -70,6 +76,8 @@ module  top
     wire            start, stop;
     wire            alarm_ring, timer_ring, buzzer_enb, song;
     wire    [6:0]   ir_key;
+    wire    [7:0]   ir_addr, ir_cmd;
+    wire            ir_seen, aux;
     wire            psd_mute, psd_near;
     wire    [11:0]  psd_data;
     wire    [7:0]   sw_key = SW0_SHARED_WITH_IR ? {1'b1, i_sw[6:1], i_sw[7]} : i_sw;
@@ -79,10 +87,27 @@ module  top
     clock_ir_keys #(
         .CLK_HZ(IO_CLK_HZ), .IR_FILTER_ADDRESS(IR_FILTER_ADDRESS), .IR_ADDRESS(IR_ADDRESS),
         .IR_MODE(IR_MODE), .IR_TARG(IR_TARG), .IR_INC(IR_INC), .IR_ALARM(IR_ALARM),
-        .IR_DEC(IR_DEC), .IR_START(IR_START), .IR_STOP(IR_STOP)
+        .IR_DEC(IR_DEC), .IR_START(IR_START), .IR_STOP(IR_STOP),
+        .IR_TARG2(IR_TARG2), .IR_INC2(IR_INC2), .IR_DEC2(IR_DEC2)
     ) u_ir_keys (
-        .i_clk(i_clk), .i_rstn(i_rstn), .i_ir_n(i_ir_n), .o_key(ir_key)
+        .i_clk(i_clk), .i_rstn(i_rstn), .i_ir_n(i_ir_n), .o_key(ir_key),
+        .o_last_addr(ir_addr), .o_last_cmd(ir_cmd), .o_seen(ir_seen)
     );
+
+    // ---- 리모콘 코드 확인 화면 (sw[7] 누를 때마다 켜기/끄기) ----
+    //  켜지면 점 6개가 모두 켜지고, 왼쪽 3자리 = 주소, 오른쪽 3자리 = 명령 (10진수)
+    reg             ir_dbg;
+    always @(posedge i_clk or negedge i_rstn) begin
+        if(!i_rstn)     ir_dbg  <= 1'b0;
+        else if(aux)    ir_dbg  <= ~ir_dbg;
+    end
+    wire    [3:0]   dbg_num[0:5];
+    assign  dbg_num[5] = ir_seen ? ir_addr / 100       : 4'd15;
+    assign  dbg_num[4] = ir_seen ? (ir_addr / 10) % 10 : 4'd15;
+    assign  dbg_num[3] = ir_seen ? ir_addr % 10        : 4'd15;
+    assign  dbg_num[2] = ir_seen ? ir_cmd / 100        : 4'd15;
+    assign  dbg_num[1] = ir_seen ? (ir_cmd / 10) % 10  : 4'd15;
+    assign  dbg_num[0] = ir_seen ? ir_cmd % 10         : 4'd15;
 
     clock_lcd_status #(.CLK_HZ(IO_CLK_HZ)) u_lcd_status (
         .i_clk(i_clk), .i_rstn(i_rstn), .i_mode(mode), .i_alarm_en(alarm_en),
@@ -113,6 +138,7 @@ module  top
         .o_tick_1hz     (tick_1hz       ),
         .o_start        (start          ),
         .o_stop         (stop           ),
+        .o_aux          (aux            ),
         .i_ext_key      (ir_key          ),
         .i_sw           (sw_key         ),
         .i_clk          (i_clk          ),
@@ -256,18 +282,18 @@ module  top
     u_ssegdisp(
         .o_seg_enb      (o_seg_enb      ),
         .o_seg          (o_seg          ),
-        .i_num0         (disp_num[0]    ),
-        .i_num1         (disp_num[1]    ),
-        .i_num2         (disp_num[2]    ),
-        .i_num3         (disp_num[3]    ),
-        .i_num4         (disp_num[4]    ),
-        .i_num5         (disp_num[5]    ),
-        .i_dp0          (alarm_en       ),  // 알람 On 표시
-        .i_dp1          (1'b0           ),
+        .i_num0         (ir_dbg ? dbg_num[0] : disp_num[0]),
+        .i_num1         (ir_dbg ? dbg_num[1] : disp_num[1]),
+        .i_num2         (ir_dbg ? dbg_num[2] : disp_num[2]),
+        .i_num3         (ir_dbg ? dbg_num[3] : disp_num[3]),
+        .i_num4         (ir_dbg ? dbg_num[4] : disp_num[4]),
+        .i_num5         (ir_dbg ? dbg_num[5] : disp_num[5]),
+        .i_dp0          (ir_dbg | alarm_en),  // 알람 On 표시 (코드 확인 화면이면 점 6개 모두)
+        .i_dp1          (ir_dbg         ),
         .i_dp2          (1'b1           ),  // 분.초 사이 점
-        .i_dp3          (1'b0           ),
+        .i_dp3          (ir_dbg         ),
         .i_dp4          (1'b1           ),  // 시.분 사이 점
-        .i_dp5          (1'b0           ),
+        .i_dp5          (ir_dbg         ),
         .i_clk          (i_clk          ),
         .i_rstn         (i_rstn         )
     );

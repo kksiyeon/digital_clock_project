@@ -4,7 +4,8 @@
 //    1) psd_adc 가 ADC128S102 프레임(SCLK 16번, 채널 주소, 12비트 값)을 맞게 주고받는지
 //    2) 임계값 + 히스테리시스로 '가까움' 판단
 //    3) top 전체: 알람이 울릴 때 ADC 값이 커지면(손을 가까이) 울림이 꺼지고 알람 ON 은 유지
-//    4) 보드 기본 설정(SW0_SHARED_WITH_IR=0): IR 이 따로 있어도 모드 버튼 = sw[0], sw[7] 은 무시
+//    4) 보드 기본 설정(SW0_SHARED_WITH_IR=0): IR 이 따로 있어도 모드 버튼 = sw[0]
+//    5) 수업 리모콘(LY) 기본 코드 매핑, sw[7] 리모콘 코드 확인 화면
 //  실행 (저장소 루트):
 //    iverilog -g2012 -s tb_board_io -o /tmp/tb_board_io src/*.v src/class/*.v sim/tb_board_io.v
 //    vvp /tmp/tb_board_io
@@ -19,11 +20,12 @@ module tb_board_io;
     wire        lcd_rs, lcd_rw, lcd_e;
     wire [7:0]  lcd_data;
     reg         adc_dout = 1'b0;
+    reg         ir_n = 1'b1;
 
     top #(.PSD_ADC_CH(3'd5), .PSD_STABLE_CYCLES(100)) dut(
         .o_seg_enb(seg_enb), .o_seg(seg), .o_buzzer(buzzer),
         .i_sw(sw), .i_clk(clk), .i_rstn(rstn),
-        .i_ir_n(1'b1),
+        .i_ir_n(ir_n),
         .o_adc_csn(adc_csn), .o_adc_sclk(adc_sclk), .o_adc_din(adc_din), .i_adc_dout(adc_dout),
         .o_lcd_rs(lcd_rs), .o_lcd_rw(lcd_rw), .o_lcd_e(lcd_e), .o_lcd_data(lcd_data)
     );
@@ -65,6 +67,18 @@ module tb_board_io;
     task wait_frames(input integer n);
         integer f0;
         begin f0 = frames; wait (frames >= f0 + n); repeat (20) @(posedge clk); end
+    endtask
+    task nec(input [7:0] c);            // 실제 50MHz 타이밍의 NEC 프레임 (주소 0x00)
+        reg [31:0] p; integer n;
+        begin
+            p = {~c, c, 8'hFF, 8'h00};
+            ir_n = 0; #9000000; ir_n = 1; #4500000;
+            for (n = 0; n < 32; n = n + 1) begin
+                ir_n = 0; #560000; ir_n = 1;
+                if (p[n]) #1690000; else #560000;
+            end
+            ir_n = 0; #560000; ir_n = 1; #2000000;
+        end
     endtask
     task press(input integer k);
         begin
@@ -116,15 +130,42 @@ module tb_board_io;
         // 4) 보드 기본 설정: 모드 = sw[0], sw[7] 은 사용 안 함
         chk(dut.mode == 2'd0, "mode CLOCK_OPR");
         press(7);
-        chk(dut.mode == 2'd0, "sw[7] unused");
+        chk(dut.mode == 2'd0, "sw[7] does not change mode");
+        press(7);                                   // sw[7] 은 리모콘 코드 화면 토글 -> 다시 끔
         press(0);
         chk(dut.mode == 2'd1, "sw[0] -> CLOCK_SET");
         press(1);
         chk(dut.targ == 2'd1, "sw[1] still selects field");
 
+        // 5) 수업 리모콘 기본 코드
+        press(0); press(0); press(0);
+        chk(dut.mode == 2'd0, "back to CLOCK_OPR");
+        nec(8'h47); chk(dut.mode == 2'd1, "MENU(0x47) -> mode");
+        nec(8'h09); chk(dut.targ == 2'd1, "RIGHT(0x09) -> field MIN");
+        nec(8'h07); chk(dut.targ == 2'd2, "LEFT(0x07) -> field HOUR");
+        nec(8'h40); chk(dut.clock_hour == 6'd1, "UP(0x40) -> hour +1");
+        nec(8'h44); chk(dut.clock_hour == 6'd2, "PLUS(0x44) -> hour +1");
+        nec(8'h19); chk(dut.clock_hour == 6'd1, "DOWN(0x19) -> hour -1");
+        nec(8'h16); chk(dut.clock_hour == 6'd0, "MINUS(0x16) -> hour -1");
+        nec(8'h45); chk(dut.alarm_en == 1'b0, "POWER(0x45) -> alarm toggle (ON->OFF)");
+        nec(8'h47); nec(8'h47);
+        chk(dut.mode == 2'd3, "MENU x2 -> TIMER");
+        nec(8'h15); chk(dut.timer_state == 2'd1, "OK(0x15) -> timer start");
+        nec(8'h43); chk(dut.timer_state == 2'd0, "BACK(0x43) -> timer reset");
+        nec(8'h5E); chk(dut.mode == 2'd3 && dut.timer_state == 2'd0, "unmapped '3'(0x5E) does nothing");
+        // 코드 확인 화면: sw[7] -> 7-seg 에 주소 000, 명령 094 (0x5E)
+        press(7);
+        chk(dut.ir_dbg == 1'b1, "sw[7] -> IR code view ON");
+        chk(dut.dbg_num[5] == 0 && dut.dbg_num[4] == 0 && dut.dbg_num[3] == 0, "view: address 000");
+        chk(dut.dbg_num[2] == 0 && dut.dbg_num[1] == 9 && dut.dbg_num[0] == 4, "view: command 094 (=0x5E)");
+        nec(8'h45);
+        chk(dut.dbg_num[2] == 0 && dut.dbg_num[1] == 6 && dut.dbg_num[0] == 9, "view updates: 069 (=0x45)");
+        press(7);
+        chk(dut.ir_dbg == 1'b0, "sw[7] again -> normal view");
+
         if (errors == 0) $display("ALL TESTS PASSED");
         else             $fatal(1, "%0d TEST(S) FAILED", errors);
         $finish;
     end
-    initial #50000000 $fatal(1, "timeout");
+    initial #2000000000 $fatal(1, "timeout");
 endmodule

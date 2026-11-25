@@ -10,7 +10,8 @@ module tb_team_clock_io;
           .IR_FILTER_ADDRESS(1), .IR_ADDRESS(8'h12),
           .IR_MODE(8'h45), .IR_TARG(8'h46), .IR_INC(8'h18), .IR_ALARM(8'h47),
           .IR_DEC(8'h52), .IR_START(8'h40), .IR_STOP(8'h44),
-          .IR_TARG2(8'h46), .IR_INC2(8'h18), .IR_DEC2(8'h52)) dut (
+          .IR_TARG2(8'h46), .IR_INC2(8'h18), .IR_DEC2(8'h52),
+          .IR_CHECK_ADDR_INV(1'b1)) dut (
         .i_clk(clk), .i_rstn(rstn), .i_sw(8'hFF),
         .i_ir_n(ir_n), .i_adc_dout(1'b0),
         .o_lcd_rs(lcd_rs), .o_lcd_rw(lcd_rw), .o_lcd_e(lcd_e), .o_lcd_data(lcd_data)

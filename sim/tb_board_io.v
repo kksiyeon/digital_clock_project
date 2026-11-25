@@ -5,7 +5,7 @@
 //    2) 임계값 + 히스테리시스로 '가까움' 판단
 //    3) top 전체: 알람이 울릴 때 ADC 값이 커지면(손을 가까이) 울림이 꺼지고 알람 ON 은 유지
 //    4) 보드 기본 설정(SW0_SHARED_WITH_IR=0): IR 이 따로 있어도 모드 버튼 = sw[0]
-//    5) 수업 리모콘(LY) 기본 코드 매핑, sw[7] 리모콘 코드 확인 화면
+//    5) 수업 리모콘(LY) 코드표 값 그대로 보낸 프레임으로 버튼 매핑 확인, sw[7] 리모콘 확인 화면
 //  실행 (저장소 루트):
 //    iverilog -g2012 -s tb_board_io -o /tmp/tb_board_io src/*.v src/class/*.v sim/tb_board_io.v
 //    vvp /tmp/tb_board_io
@@ -76,6 +76,17 @@ module tb_board_io;
             for (n = 0; n < 32; n = n + 1) begin
                 ir_n = 0; #560000; ir_n = 1;
                 if (p[n]) #1690000; else #560000;
+            end
+            ir_n = 0; #560000; ir_n = 1; #2000000;
+        end
+    endtask
+    task nec_tbl(input [31:0] v);       // 수업 코드표 값 그대로: v[31] 부터 받은 순서대로 전송
+        integer n;
+        begin
+            ir_n = 0; #9000000; ir_n = 1; #4500000;
+            for (n = 31; n >= 0; n = n - 1) begin
+                ir_n = 0; #560000; ir_n = 1;
+                if (v[n]) #1690000; else #560000;
             end
             ir_n = 0; #560000; ir_n = 1; #2000000;
         end
@@ -152,29 +163,29 @@ module tb_board_io;
         // 5) 수업 리모콘 기본 코드
         press(0); press(0); press(0);
         chk(dut.mode == 2'd0, "back to CLOCK_OPR");
-        nec(8'h47); chk(dut.mode == 2'd1, "MENU(0x47) -> mode");
-        nec(8'h09); chk(dut.targ == 2'd1, "RIGHT(0x09) -> field MIN");
-        nec(8'h07); chk(dut.targ == 2'd2, "LEFT(0x07) -> field HOUR");
-        nec(8'h40); chk(dut.clock_hour == 6'd1, "UP(0x40) -> hour +1");
-        nec(8'h44); chk(dut.clock_hour == 6'd2, "PLUS(0x44) -> hour +1");
-        nec(8'h19); chk(dut.clock_hour == 6'd1, "DOWN(0x19) -> hour -1");
-        nec(8'h16); chk(dut.clock_hour == 6'd0, "MINUS(0x16) -> hour -1");
-        nec(8'h45); chk(dut.alarm_en == 1'b0, "POWER(0x45) -> alarm toggle (ON->OFF)");
-        nec(8'h47); nec(8'h47);
+        nec_tbl(32'h00FD40BF); chk(dut.mode == 2'd1, "MENU(0xFD40BF) -> mode");
+        nec_tbl(32'h00FD50AF); chk(dut.targ == 2'd1, "RIGHT(0xFD50AF) -> field MIN");
+        nec_tbl(32'h00FD10EF); chk(dut.targ == 2'd2, "LEFT(0xFD10EF) -> field HOUR");
+        nec_tbl(32'h00FDA05F); chk(dut.clock_hour == 6'd1, "UP(0xFDA05F) -> hour +1");
+        nec_tbl(32'h00FD20DF); chk(dut.clock_hour == 6'd2, "PLUS(0xFD20DF) -> hour +1");
+        nec_tbl(32'h00FDB04F); chk(dut.clock_hour == 6'd1, "DOWN(0xFDB04F) -> hour -1");
+        nec_tbl(32'h00FD30CF); chk(dut.clock_hour == 6'd0, "MINUS(0xFD30CF) -> hour -1");
+        nec_tbl(32'h00FD00FF); chk(dut.alarm_en == 1'b0, "POWER(0xFD00FF) -> alarm toggle (ON->OFF)");
+        nec_tbl(32'h00FD40BF); nec_tbl(32'h00FD40BF);
         chk(dut.mode == 2'd3, "MENU x2 -> TIMER");
-        nec(8'h15); chk(dut.timer_state == 2'd1, "OK(0x15) -> timer start");
-        nec(8'h43); chk(dut.timer_state == 2'd0, "BACK(0x43) -> timer reset");
-        nec(8'h5E); chk(dut.mode == 2'd3 && dut.timer_state == 2'd0, "unmapped '3'(0x5E) does nothing");
+        nec_tbl(32'h00FD906F); chk(dut.timer_state == 2'd1, "OK(0xFD906F) -> timer start");
+        nec_tbl(32'h00FD609F); chk(dut.timer_state == 2'd0, "BACK(0xFD609F) -> timer reset");
+        nec_tbl(32'h00FD48B7); chk(dut.mode == 2'd3 && dut.timer_state == 2'd0, "unmapped '3'(0xFD48B7) does nothing");
         // 코드 확인 화면: sw[7] -> 7-seg 에 주소 000, 명령 094 (0x5E)
         press(7);
         chk(dut.ir_dbg == 1'b1, "sw[7] -> IR code view ON");
         chk(dut.ir_edges == 10'd442, "view: IR falling edges counted (34 per frame x 13 frames)");
         chk(dut.dbg_num[5] == 4 && dut.dbg_num[4] == 4 && dut.dbg_num[3] == 2, "view: edge count 442 shown");
-        chk(dut.dbg_num[2] == 0 && dut.dbg_num[1] == 9 && dut.dbg_num[0] == 4, "view: command 094 (=0x5E)");
-        nec(8'h45);
-        chk(dut.dbg_num[2] == 0 && dut.dbg_num[1] == 6 && dut.dbg_num[0] == 9, "view updates: 069 (=0x45)");
+        chk(dut.dbg_num[2] == 0 && dut.dbg_num[1] == 1 && dut.dbg_num[0] == 8, "view: command 018 (button 3 = 0x12)");
+        nec_tbl(32'h00FD40BF);
+        chk(dut.dbg_num[2] == 0 && dut.dbg_num[1] == 0 && dut.dbg_num[0] == 2, "view updates: 002 (MENU)");
         nec_ext(8'h19);
-        chk(dut.ir_cmd == 8'h19, "extended NEC (16-bit address) accepted");
+        chk(dut.ir_cmd == 8'h19, "other 16-bit address NEC accepted");
         press(7);
         chk(dut.ir_dbg == 1'b0, "sw[7] again -> normal view");
 

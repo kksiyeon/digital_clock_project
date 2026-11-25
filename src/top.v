@@ -38,15 +38,16 @@ module  top
     parameter SW0_SHARED_WITH_IR = 1'b0,     // 1: IR 을 sw[0] 핀(C9)에 꽂을 때. 모드 버튼 = sw[7]
     parameter IR_FILTER_ADDRESS = 1'b0,
     parameter [7:0] IR_ADDRESS = 8'h00,
-    // 수업 리모콘(LY, 21키 배열) NEC 명령 코드 [추정: 같은 칩을 쓰는 21키 리모콘의 버튼 위치별 코드]
-    //  sw[7] 을 누르면 7-세그먼트에 받은 코드가 10진수로 나오므로 실제 값으로 확인/수정
-    //   MENU(71=0x47) 모드 / ◀(7=0x07) ▶(9=0x09) 설정 대상 / +(68=0x44) ▲(64=0x40) 증가
-    //   -(22=0x16) ▼(25=0x19) 감소 / 전원(69=0x45) 알람 On/Off / OK(21=0x15) 타이머 시작
-    //   ↩(67=0x43) 정지
-    parameter [7:0] IR_MODE = 8'h47, IR_TARG = 8'h09, IR_INC = 8'h40,
-                    IR_ALARM = 8'h45, IR_DEC = 8'h19, IR_START = 8'h15,
-                    IR_STOP = 8'h43,
-    parameter [7:0] IR_TARG2 = 8'h07, IR_INC2 = 8'h44, IR_DEC2 = 8'h16,
+    // 수업 리모콘(LY) NEC 명령 코드 - 수업 코드표 기준
+    //  코드표 값(예: MENU 0xFD40BF)은 받은 순서대로 MSB 부터 적은 32비트라서,
+    //  셋째 바이트(40)를 비트 반전한 값이 NEC 명령(0x02)이다. 주소는 0x00 + 0xBF (확장 NEC)
+    //   MENU 0x02 모드 / ◀ 0x08, ▶ 0x0A 설정 대상 / ▲ 0x05, + 0x04 증가
+    //   ▼ 0x0D, - 0x0C 감소 / 전원 0x00 알람 On/Off / OK 0x09 타이머 시작 / ↩ 0x06 정지
+    //  (sw[7] 확인 화면 오른쪽 3자리에 이 값이 10진수로 나옴: MENU = 002)
+    parameter [7:0] IR_MODE = 8'h02, IR_TARG = 8'h0A, IR_INC = 8'h05,
+                    IR_ALARM = 8'h00, IR_DEC = 8'h0D, IR_START = 8'h09,
+                    IR_STOP = 8'h06,
+    parameter [7:0] IR_TARG2 = 8'h08, IR_INC2 = 8'h04, IR_DEC2 = 8'h0C,
     parameter IR_CHECK_ADDR_INV = 1'b0         // 1: 주소 반전 바이트까지 검사 (표준 NEC 만)
 )
 (

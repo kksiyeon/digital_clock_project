@@ -16,8 +16,8 @@ module tb_alarm_timer;
     wire [7:0]  seg;
     wire        buzzer;
 
-    top dut(.o_seg_enb(seg_enb), .o_seg(seg), .o_buzzer(buzzer), .i_sw(sw), .i_clk(clk), .i_rstn(rstn),
-            .i_ir_n(1'b1), .i_psd_near(1'b0));
+    top #(.SW0_SHARED_WITH_IR(1'b0)) dut(.o_seg_enb(seg_enb), .o_seg(seg), .o_buzzer(buzzer), .i_sw(sw), .i_clk(clk), .i_rstn(rstn),
+            .i_ir_n(1'b1), .i_adc_dout(1'b0));
     defparam dut.u_ctrl.DEB_FREQDIV         = 10;
     defparam dut.u_ctrl.SEC_FREQDIV         = 1000;
     defparam dut.u_blink.FREQDIV            = 200;

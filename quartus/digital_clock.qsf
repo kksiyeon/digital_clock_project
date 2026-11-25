@@ -41,11 +41,9 @@ set_location_assignment PIN_R8  -to i_clk
 set_location_assignment PIN_J15 -to i_rstn
 
 # ---- 키스위치 ----
-#  i_sw[0] (PIN_C9) 자리는 IR 수신기(i_ir_n)가 씀 -> top 의 SW0_SHARED_WITH_IR=1 이라
-#  모드 버튼은 sw[7] (PIN_D11). i_sw[0] 은 회로에서 쓰지 않으므로 핀을 지정하지 않음
-#  (Quartus 가 "핀 미지정" 경고를 내도 무시해도 됨)
-#   sw[7] 모드 / sw[1] 설정 대상 / sw[2] 증가 / sw[3] 알람 On/Off / sw[4] 감소
-#   sw[5] 타이머 시작/일시정지 / sw[6] 정지
+#  키스위치 모듈 케이블 -> AVR-STACK J20 (FPGA GPIO-0 24~31), 수업 8~9주차와 같음
+#   sw[0] 모드 / sw[1] 설정 대상 / sw[2] 증가 / sw[3] 알람 On/Off / sw[4] 감소
+#   sw[5] 타이머 시작/일시정지 / sw[6] 정지 / sw[7] 사용 안 함
 set_location_assignment PIN_D11 -to i_sw[7]
 set_location_assignment PIN_A12 -to i_sw[6]
 set_location_assignment PIN_B11 -to i_sw[5]
@@ -53,14 +51,17 @@ set_location_assignment PIN_C11 -to i_sw[4]
 set_location_assignment PIN_E10 -to i_sw[3]
 set_location_assignment PIN_E11 -to i_sw[2]
 set_location_assignment PIN_D9  -to i_sw[1]
+set_location_assignment PIN_C9  -to i_sw[0]
 
-# ---- IR 리모콘 수신 (수업 10주차 i_ir_rxb 와 같은 핀) ----
-set_location_assignment PIN_C9  -to i_ir_n
+# ---- IR 리모콘 수신 ----
+#  수업 10주차는 IR 모듈을 J20 (PIN_C9) 에 꽂았지만 J20 은 키스위치가 쓰므로
+#  IR 모듈 케이블 -> AVR-STACK J12 (FPGA GPIO-1 16~23). 신호는 첫 번째 핀(GPIO_1[16])
+set_location_assignment PIN_L16 -to i_ir_n
 
-# ---- 부저 ----
+# ---- 부저 (부저 모듈 케이블 -> GPIO-0 16~23 커넥터, GPIO_0[16]) ----
 set_location_assignment PIN_C8  -to o_buzzer
 
-# ---- 7-세그먼트 (GPIO-1 헤더, 수업 8주차) ----
+# ---- 7-세그먼트 (수업 8주차: FND J3 -> STACK J10 (GPIO-1 0~7), FND J4 -> STACK J11 (GPIO-1 8~15)) ----
 set_location_assignment PIN_F13 -to o_seg[7]
 set_location_assignment PIN_T15 -to o_seg[6]
 set_location_assignment PIN_T14 -to o_seg[5]
@@ -76,7 +77,7 @@ set_location_assignment PIN_R10 -to o_seg_enb[2]
 set_location_assignment PIN_N12 -to o_seg_enb[1]
 set_location_assignment PIN_P9  -to o_seg_enb[0]
 
-# ---- 거리센서 : DE0-Nano 내장 ADC128S102 (수업 10주차) ----
+# ---- 거리센서 : DE0-Nano 내장 ADC128S102 (수업 10주차, PSD 모듈 케이블 -> STACK J14 (GPIO-2 A0~)) ----
 set_location_assignment PIN_A10 -to o_adc_csn
 set_location_assignment PIN_B10 -to o_adc_din
 set_location_assignment PIN_B14 -to o_adc_sclk
@@ -84,7 +85,7 @@ set_location_assignment PIN_A9  -to i_adc_dout
 
 # ---- Text LCD (GPIO-0 헤더 GPIO_0[0..10]) ----
 #  수업 11주차 LCD 핀(T11,R12,...,P11 = GPIO_1[0..10])은 7-세그먼트 핀과 같아서 동시에 쓸 수 없음.
-#  그래서 LCD 케이블을 GPIO-0 헤더의 같은 위치(GPIO_0[0..10])에 꽂는 것으로 정함.
+#  그래서 LCD 데이터 케이블 -> GPIO-0 0~7 커넥터, LCD 제어(RS/RW/E) 케이블 -> GPIO-0 8~15 커넥터.
 #  위치 대응: data0 GPIO_0[0]=D3 ... data7 GPIO_0[7]=B5, rs [8]=A5, rw [9]=D5, e [10]=B6
 #  배선을 다르게 하면 아래 11줄만 고치면 됨.
 set_location_assignment PIN_D3  -to o_lcd_data[0]

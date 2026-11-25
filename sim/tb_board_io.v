@@ -4,7 +4,7 @@
 //    1) psd_adc 가 ADC128S102 프레임(SCLK 16번, 채널 주소, 12비트 값)을 맞게 주고받는지
 //    2) 임계값 + 히스테리시스로 '가까움' 판단
 //    3) top 전체: 알람이 울릴 때 ADC 값이 커지면(손을 가까이) 울림이 꺼지고 알람 ON 은 유지
-//    4) 보드 기본 설정(SW0_SHARED_WITH_IR=1): 모드 버튼 = sw[7], sw[0] 은 무시
+//    4) 보드 기본 설정(SW0_SHARED_WITH_IR=0): IR 이 따로 있어도 모드 버튼 = sw[0], sw[7] 은 무시
 //  실행 (저장소 루트):
 //    iverilog -g2012 -s tb_board_io -o /tmp/tb_board_io src/*.v src/class/*.v sim/tb_board_io.v
 //    vvp /tmp/tb_board_io
@@ -113,12 +113,12 @@ module tb_board_io;
         release dut.clock_hour; release dut.clock_min; release dut.clock_sec;
         adc_val[5] = 12'd300; wait_frames(3);
 
-        // 4) 보드 설정: 모드 = sw[7], sw[0] 은 IR 핀이라 무시
+        // 4) 보드 기본 설정: 모드 = sw[0], sw[7] 은 사용 안 함
         chk(dut.mode == 2'd0, "mode CLOCK_OPR");
-        press(0);
-        chk(dut.mode == 2'd0, "sw[0] ignored (shared with IR pin)");
         press(7);
-        chk(dut.mode == 2'd1, "sw[7] -> CLOCK_SET");
+        chk(dut.mode == 2'd0, "sw[7] unused");
+        press(0);
+        chk(dut.mode == 2'd1, "sw[0] -> CLOCK_SET");
         press(1);
         chk(dut.targ == 2'd1, "sw[1] still selects field");
 

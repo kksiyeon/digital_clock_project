@@ -8,10 +8,11 @@
 //  [보드 연결 정리]
 //   - 거리센서: psd_adc.v 가 보드 내장 ADC128S102 를 SPI 로 읽어 '가까움' 레벨을 만들고,
 //              clock_psd_mute 가 20ms 안정화 후 울림만 끔
-//   - 리모콘 : 수업 10주차처럼 IR 수신기를 PIN_C9 에 연결. 이 핀은 원래 sw[0](모드) 자리라서
-//              SW0_SHARED_WITH_IR=1 (기본) 이면 모드 버튼을 sw[7] (PIN_D11) 로 옮김
-//              (시뮬레이션처럼 sw[0] 을 모드로 쓰려면 SW0_SHARED_WITH_IR=0)
+//   - 리모콘 : 수업 10주차는 IR 모듈을 키스위치 자리(GPIO-0 J20, PIN_C9)에 꽂았지만, 팀플에서는
+//              키스위치와 같이 써야 하므로 IR 모듈을 GPIO-1 J12 (GPIO_1[16], PIN_L16) 에 꽂음.
+//              sw[0] 은 그대로 모드 버튼. (IR 을 J20/C9 에 꽂아야 하면 SW0_SHARED_WITH_IR=1 -> 모드 = sw[7])
 //   - LCD    : 7-세그먼트와 핀이 겹치지 않게 GPIO-0 헤더 GPIO_0[0..10] 에 연결 (quartus/digital_clock.qsf)
+//   - 케이블별 꽂는 위치는 README '보드 연결' 표 참고
 //
 //  [알람·타이머 추가]
 //   - u_alarm : hms_cnt 자리표시 -> alarm.v (기본 07:00:00, 설정 중 증가/감소)
@@ -34,7 +35,7 @@ module  top
     parameter [11:0] PSD_TH_ON  = 12'd2000,  // 이 값 이상이면 가까움 (보드에서 조정)
     parameter [11:0] PSD_TH_OFF = 12'd1600,  // 이 값 이하이면 멀어짐
     parameter integer PSD_SCLK_HALF = 3,     // ADC SCLK = i_clk / (2*3) = 약 8.3MHz
-    parameter SW0_SHARED_WITH_IR = 1'b1,     // 1: IR 이 sw[0] 핀(C9)을 쓰므로 모드 버튼 = sw[7]
+    parameter SW0_SHARED_WITH_IR = 1'b0,     // 1: IR 을 sw[0] 핀(C9)에 꽂을 때. 모드 버튼 = sw[7]
     parameter IR_FILTER_ADDRESS = 1'b0,
     parameter [7:0] IR_ADDRESS = 8'h00,
     parameter [7:0] IR_MODE = 8'h45, IR_TARG = 8'h46, IR_INC = 8'h18,

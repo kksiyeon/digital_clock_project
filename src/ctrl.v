@@ -33,6 +33,7 @@ module  ctrl
     output              o_tick_1hz,     // 1초마다 1클럭 펄스
     output              o_start,        // 타이머 시작/일시정지 1클럭 펄스
     output              o_stop,         // 정지 1클럭 펄스 (울림 끄기 / 타이머 리셋)
+    output              o_aux,          // sw[7] 1클럭 펄스 (top 에서 리모콘 코드 확인 화면 전환)
     input       [6:0]   i_ext_key,      // 리모콘 펄스 {정지, 시작, 감소, 알람, 증가, 대상, 모드}, 안 쓰면 7'd0
     input       [7:0]   i_sw,
     input               i_clk,
@@ -84,6 +85,7 @@ module  ctrl
     assign  o_key_any   = key_targ | key_inc | key_dec;
     assign  o_start     = key_start;
     assign  o_stop      = key_stop;
+    assign  o_aux       = p_sw[7];
 
     // ---- 모드 FSM ----
     always @(posedge i_clk or negedge i_rstn) begin

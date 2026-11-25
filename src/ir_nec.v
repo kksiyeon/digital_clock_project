@@ -1,6 +1,7 @@
 `timescale 1ns/1ps
 // Standard NEC, idle high, LSB first. Repeat frames are intentionally ignored.
-module ir_nec #(parameter integer CLK_HZ = 50000000) (
+// CHECK_ADDR_INV=0: 주소 반전 바이트를 검사하지 않음 (16비트 주소를 쓰는 확장 NEC 리모콘도 받음)
+module ir_nec #(parameter integer CLK_HZ = 50000000, parameter CHECK_ADDR_INV = 1'b0) (
     input clk, rst_n, ir_n,
     output reg valid,
     output reg [7:0] address, command
@@ -50,7 +51,7 @@ module ir_nec #(parameter integer CLK_HZ = 50000000) (
                     STOP_LOW: begin
                         state <= IDLE;
                         if (pin && in_window(350,800) &&
-                            frame[7:0] == ~frame[15:8] && frame[23:16] == ~frame[31:24]) begin
+                            (!CHECK_ADDR_INV || frame[7:0] == ~frame[15:8]) && frame[23:16] == ~frame[31:24]) begin
                             address <= frame[7:0]; command <= frame[23:16]; valid <= 1;
                         end
                     end

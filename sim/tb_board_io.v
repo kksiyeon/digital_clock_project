@@ -80,6 +80,18 @@ module tb_board_io;
             ir_n = 0; #560000; ir_n = 1; #2000000;
         end
     endtask
+    task nec_ext(input [7:0] c);        // 확장 NEC: 주소 2바이트가 반전 관계가 아님 (0x7F80)
+        reg [31:0] p; integer n;
+        begin
+            p = {~c, c, 8'h7F, 8'h80};
+            ir_n = 0; #9000000; ir_n = 1; #4500000;
+            for (n = 0; n < 32; n = n + 1) begin
+                ir_n = 0; #560000; ir_n = 1;
+                if (p[n]) #1690000; else #560000;
+            end
+            ir_n = 0; #560000; ir_n = 1; #2000000;
+        end
+    endtask
     task press(input integer k);
         begin
             sw[k] = 1'b0; repeat (50) @(posedge clk);
@@ -156,10 +168,13 @@ module tb_board_io;
         // 코드 확인 화면: sw[7] -> 7-seg 에 주소 000, 명령 094 (0x5E)
         press(7);
         chk(dut.ir_dbg == 1'b1, "sw[7] -> IR code view ON");
-        chk(dut.dbg_num[5] == 0 && dut.dbg_num[4] == 0 && dut.dbg_num[3] == 0, "view: address 000");
+        chk(dut.ir_edges == 10'd442, "view: IR falling edges counted (34 per frame x 13 frames)");
+        chk(dut.dbg_num[5] == 4 && dut.dbg_num[4] == 4 && dut.dbg_num[3] == 2, "view: edge count 442 shown");
         chk(dut.dbg_num[2] == 0 && dut.dbg_num[1] == 9 && dut.dbg_num[0] == 4, "view: command 094 (=0x5E)");
         nec(8'h45);
         chk(dut.dbg_num[2] == 0 && dut.dbg_num[1] == 6 && dut.dbg_num[0] == 9, "view updates: 069 (=0x45)");
+        nec_ext(8'h19);
+        chk(dut.ir_cmd == 8'h19, "extended NEC (16-bit address) accepted");
         press(7);
         chk(dut.ir_dbg == 1'b0, "sw[7] again -> normal view");
 

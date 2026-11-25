@@ -9,7 +9,8 @@ module clock_ir_keys #(
     parameter [7:0] IR_MODE = 8'h45, IR_TARG = 8'h46, IR_INC = 8'h18,
                     IR_ALARM = 8'h47, IR_DEC = 8'h52, IR_START = 8'h40,
                     IR_STOP = 8'h44,
-    parameter [7:0] IR_TARG2 = IR_TARG, IR_INC2 = IR_INC, IR_DEC2 = IR_DEC
+    parameter [7:0] IR_TARG2 = IR_TARG, IR_INC2 = IR_INC, IR_DEC2 = IR_DEC,
+    parameter CHECK_ADDR_INV = 1'b0
 ) (
     input i_clk, i_rstn, i_ir_n,
     output reg [6:0] o_key,
@@ -18,7 +19,7 @@ module clock_ir_keys #(
 );
     wire valid;
     wire [7:0] address, command;
-    ir_nec #(.CLK_HZ(CLK_HZ)) u_nec (
+    ir_nec #(.CLK_HZ(CLK_HZ), .CHECK_ADDR_INV(CHECK_ADDR_INV)) u_nec (
         .clk(i_clk), .rst_n(i_rstn), .ir_n(i_ir_n),
         .valid(valid), .address(address), .command(command)
     );
